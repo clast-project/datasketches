@@ -1,0 +1,80 @@
+// Copyright (c) clast-project. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+namespace Clast.Sketches.Theta;
+
+/// <summary>
+/// Base class for Theta sketches — distinct-count estimators that also support
+/// set operations (union, intersection, difference) on the sketches themselves.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A Theta sketch keeps a sample of the hash space: every retained hash is
+/// below a threshold <c>theta</c>, and the distinct count is estimated as
+/// <c>retained / theta</c>. Because the sample is determined by the hash values
+/// alone and not by insertion order, two sketches over different data can be
+/// combined exactly — which is what distinguishes Theta from a plain
+/// distinct-count estimator.
+/// </para>
+/// <para>
+/// Derive-ability is deliberately internal: the serialized layouts are fixed by
+/// the DataSketches format, so a third-party subclass could not be serialized
+/// meaningfully.
+/// </para>
+/// </remarks>
+public abstract class ThetaSketch
+{
+    /// <summary>
+    /// The update seed used by every DataSketches implementation unless told
+    /// otherwise. Sketches built with different seeds cannot be merged.
+    /// </summary>
+    public const ulong DefaultUpdateSeed = 9001UL;
+
+    /// <summary>Theta expressed on the wire: <see cref="long.MaxValue"/> means theta = 1.0.</summary>
+    private const double LongMaxValueAsDouble = long.MaxValue;
+
+    internal ThetaSketch()
+    {
+    }
+
+    /// <summary>The sketch family, as recorded in the serialized preamble.</summary>
+    public abstract SketchFamily Family { get; }
+
+    /// <summary>True if this sketch has seen no values at all.</summary>
+    public abstract bool IsEmpty { get; }
+
+    /// <summary>True if the retained hashes are in ascending order.</summary>
+    public abstract bool IsOrdered { get; }
+
+    /// <summary>The number of hashes the sketch is currently holding.</summary>
+    public abstract int RetainedEntries { get; }
+
+    /// <summary>
+    /// Theta in its stored form, a positive <see cref="long"/> where
+    /// <see cref="long.MaxValue"/> represents 1.0.
+    /// </summary>
+    public abstract long ThetaLong { get; }
+
+    /// <summary>Theta as a fraction in (0, 1].</summary>
+    public double Theta => ThetaLong / LongMaxValueAsDouble;
+
+    /// <summary>
+    /// True if the sketch is sampling and its count is therefore an estimate.
+    /// False when the sketch held everything it saw, in which case
+    /// <see cref="Estimate"/> is exact.
+    /// </summary>
+    public bool IsEstimationMode => ThetaLong < long.MaxValue && !IsEmpty;
+
+    /// <summary>
+    /// The estimated number of distinct values. Exact when
+    /// <see cref="IsEstimationMode"/> is false.
+    /// </summary>
+    /// <remarks>
+    /// Virtual because the Alpha sketch decays theta continuously and reads its
+    /// estimate off theta rather than off the retained count.
+    /// </remarks>
+    public virtual double Estimate => RetainedEntries * (LongMaxValueAsDouble / ThetaLong);
+
+    /// <summary>Serializes the sketch to its DataSketches-compatible byte image.</summary>
+    public abstract byte[] ToByteArray();
+}

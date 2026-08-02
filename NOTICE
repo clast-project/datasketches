@@ -1,0 +1,29 @@
+Clast.Sketches
+Copyright (c) clast-project
+
+This product includes software derived from the Apache DataSketches project:
+
+  Apache DataSketches (datasketches-java, datasketches-cpp)
+  Copyright 2015-2025 The Apache Software Foundation
+  https://datasketches.apache.org/
+  Licensed under the Apache License, Version 2.0.
+
+Algorithms, serialization layouts, and constants in this library are ported
+from Apache DataSketches so that sketches serialized by either library can be
+read by the other.
+
+The serialized sketch snapshots under test/Clast.Sketches.Tests/data are copied
+verbatim from the Apache DataSketches Technology Compatibility Kit:
+
+  https://github.com/apache/datasketches-tck
+  Copyright 2015-2025 The Apache Software Foundation
+  Licensed under the Apache License, Version 2.0.
+
+The MurmurHash3 implementation derives from Apache DataSketches'
+org.apache.datasketches.hash.MurmurHash3, which is in turn derived from
+Austin Appleby's MurmurHash3_x64_128 reference implementation
+(https://github.com/aappleby/smhasher), released into the public domain.
+
+This product is not affiliated with, endorsed by, or sponsored by the Apache
+Software Foundation. "Apache", "Apache DataSketches", and "DataSketches" are
+trademarks of the Apache Software Foundation.

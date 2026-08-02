@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Clast.Sketches</PackageId>
+    <!-- Local default only; release.yml packs with -p:Version=<tag>. -->
+    <Version>0.1.0</Version>
+    <!-- Held across the whole 0.1.x line so consumers don't need a binding
+         redirect per patch. Under 0.x semver the minor is the breaking slot,
+         so bump this to 0.2.0.0 at the next breaking release. Hardcoded rather
+         than derived from $(Version), which the release tag overrides. -->
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <!-- FileVersion would otherwise default to the pinned AssemblyVersion; track
+         the real version so builds stay distinguishable. Skipped for prerelease
+         values, which are not valid Win32 file versions. -->
+    <FileVersion Condition="!$(Version.Contains('-'))">$(Version)</FileVersion>
+    <Authors>clast-project</Authors>
+    <Company>clast-project</Company>
+    <Description>Streaming sketches with binary compatibility with the Apache DataSketches library: Theta (distinct counting, set operations) and HLL. Reads and writes the same serialized forms as datasketches-java and datasketches-cpp, including the compact Theta sketch stored in Apache Iceberg Puffin files. Targets netstandard2.0, net8.0, and net10.0.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>sketch;datasketches;theta;hll;hyperloglog;cardinality;distinct-count;iceberg;puffin;probabilistic</PackageTags>
+    <RepositoryUrl>https://github.com/clast-project/datasketches</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/clast-project/datasketches</PackageProjectUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\NOTICE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="PolySharp" Version="1.14.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Clast.Sketches.Tests" Key="$(ClastPublicKey)" />
+    <InternalsVisibleTo Include="Clast.Sketches.Benchmarks" Key="$(ClastPublicKey)" />
+  </ItemGroup>
+
+</Project>

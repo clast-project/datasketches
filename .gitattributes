@@ -1,0 +1,6 @@
+# Serialized sketch snapshots are exact binary images used for compatibility
+# tests. Any line-ending translation would silently corrupt them.
+*.sk binary
+
+# The strong-name key is binary too.
+*.snk binary

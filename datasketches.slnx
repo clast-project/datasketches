@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Clast.Sketches/Clast.Sketches.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Clast.Sketches.Tests/Clast.Sketches.Tests.csproj" />
+  </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Clast.Sketches.Benchmarks/Clast.Sketches.Benchmarks.csproj" />
+  </Folder>
+</Solution>
