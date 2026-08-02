@@ -111,7 +111,7 @@ public sealed class ThetaAnotB
         if (ordered && hashes.Length > 1)
         {
             // The working array is in A's order, which carries no meaning here.
-            Array.Sort(hashes);
+            ThetaSort.Sort(hashes, hashes.Length, _thetaLong);
         }
         return new CompactThetaSketch(hashes, _thetaLong, _empty, ordered, _seedHash);
     }

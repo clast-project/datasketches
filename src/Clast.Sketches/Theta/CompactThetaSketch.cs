@@ -87,7 +87,7 @@ public sealed class CompactThetaSketch : ThetaSketch
         }
 
         long[] sorted = (long[])_hashes.Clone();
-        Array.Sort(sorted);
+        ThetaSort.Sort(sorted, sorted.Length, _thetaLong);
         return new CompactThetaSketch(sorted, _thetaLong, _empty, ordered: true, _seedHash);
     }
 

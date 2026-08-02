@@ -262,7 +262,7 @@ internal static class ThetaHashTable
 
         if (ordered && retained > 1)
         {
-            Array.Sort(output);
+            ThetaSort.Sort(output, retained, thetaLong);
         }
         return output;
     }
