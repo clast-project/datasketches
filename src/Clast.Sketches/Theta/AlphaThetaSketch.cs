@@ -98,6 +98,94 @@ internal sealed class AlphaThetaSketch : UpdateThetaSketch
             ? _curCount * ((double)long.MaxValue / _thetaLong)
             : (1 << LgNominalEntries) * ((double)long.MaxValue / _thetaLong);
 
+    /// <summary>
+    /// Alpha's bounds come from an HIP (Historic Inverse Probability) variance
+    /// rather than the binomial interval the other sketches use. Its retained
+    /// set is not a plain uniform sample — theta moved continuously while the
+    /// sketch was being built — so the binomial model does not apply.
+    /// </summary>
+    public override double GetLowerBound(int numStdDev = 2)
+    {
+        CheckNumStdDev(numStdDev);
+        if (!IsEstimationMode)
+        {
+            return _curCount;
+        }
+
+        int validCount = RetainedEntries;
+        if (validCount == 0)
+        {
+            return 0.0;
+        }
+
+        double stdDev = Math.Sqrt(Variance(validCount));
+        return Math.Max(Estimate - (numStdDev * stdDev), 0.0);
+    }
+
+    /// <inheritdoc cref="GetLowerBound"/>
+    public override double GetUpperBound(int numStdDev = 2)
+    {
+        CheckNumStdDev(numStdDev);
+        if (!IsEstimationMode)
+        {
+            return _curCount;
+        }
+
+        return Estimate + (numStdDev * Math.Sqrt(Variance(RetainedEntries)));
+    }
+
+    /// <summary>
+    /// Error variance of the HIP estimator, which depends on how far the sketch
+    /// has progressed: <c>r</c> distinguishes not-yet-decaying, just-decayed,
+    /// and fully-decaying states, because the estimator's form differs in each.
+    /// </summary>
+    private double Variance(int count)
+    {
+        double k = 1 << LgNominalEntries;
+        double p = SamplingProbability;
+        double theta = Theta;
+
+        double kPlus1 = k + 1.0;
+        double y = 1.0 / p;
+        double ySqMinusY = (y * y) - y;
+
+        double result;
+        int r = DecayState(theta, _alpha, p);
+        if (r == 0)
+        {
+            result = count * ySqMinusY;
+        }
+        else if (r == 1)
+        {
+            result = kPlus1 * ySqMinusY;
+        }
+        else
+        {
+            double b = 1.0 / _alpha;
+            double bSq = b * b;
+            double x = p / theta;
+            double xSq = x * x;
+            double term1 = kPlus1 * ySqMinusY;
+            double term2 = y / (1.0 - bSq);
+            double term3 = (y * bSq) - (y * xSq) - b - bSq + x + (x * b);
+            result = term1 + (term2 * term3);
+        }
+
+        return result + ((1 - theta) / (theta * theta));
+    }
+
+    /// <summary>
+    /// How many times theta has decayed, computed from theta itself rather than
+    /// tracked: 0 for none, 1 for exactly one, 2 for two or more.
+    /// </summary>
+    private static int DecayState(double theta, double alpha, double p)
+    {
+        double split1 = p * (alpha + 1.0) / 2.0;
+        if (theta > split1) { return 0; }
+        if (theta > alpha * split1) { return 1; }
+        return 2;
+    }
+
     internal override long[] HashCache => _cache;
 
     internal override int LgArrLongs => _lgArrLongs;

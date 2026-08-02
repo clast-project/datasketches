@@ -86,6 +86,58 @@ public abstract class ThetaSketch
     /// </remarks>
     public virtual double Estimate => RetainedEntries * (LongMaxValueAsDouble / ThetaLong);
 
+    /// <summary>
+    /// A lower confidence bound on the distinct count.
+    /// </summary>
+    /// <param name="numStdDev">
+    /// 1, 2, or 3 standard deviations — roughly 68%, 95%, or 99.7% confidence.
+    /// Defaults to 2.
+    /// </param>
+    /// <remarks>
+    /// Returns the exact count when the sketch is not estimating, since there is
+    /// then nothing to be uncertain about. The interval is a binomial confidence
+    /// interval on the sampling process, not a guarantee: at 2 standard
+    /// deviations roughly one sketch in twenty will hold a true count outside
+    /// <see cref="GetLowerBound"/>..<see cref="GetUpperBound"/>.
+    /// </remarks>
+    public virtual double GetLowerBound(int numStdDev = 2)
+    {
+        CheckNumStdDev(numStdDev);
+        return IsEstimationMode
+            ? BinomialBounds.LowerBound(RetainedEntries, Theta, numStdDev, IsEmpty)
+            : RetainedEntries;
+    }
+
+    /// <summary>
+    /// An upper confidence bound on the distinct count.
+    /// </summary>
+    /// <param name="numStdDev">
+    /// 1, 2, or 3 standard deviations — roughly 68%, 95%, or 99.7% confidence.
+    /// Defaults to 2.
+    /// </param>
+    /// <remarks>See <see cref="GetLowerBound"/>.</remarks>
+    public virtual double GetUpperBound(int numStdDev = 2)
+    {
+        CheckNumStdDev(numStdDev);
+        return IsEstimationMode
+            ? BinomialBounds.UpperBound(RetainedEntries, Theta, numStdDev, IsEmpty)
+            : RetainedEntries;
+    }
+
+    /// <summary>
+    /// Validates the confidence level. The reference implementation only checks
+    /// this on the estimating path; checking it always turns a silently
+    /// meaningless argument into an error.
+    /// </summary>
+    private protected static void CheckNumStdDev(int numStdDev)
+    {
+        if (numStdDev is < 1 or > 3)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numStdDev), numStdDev, "Number of standard deviations must be 1, 2, or 3.");
+        }
+    }
+
     /// <summary>Serializes the sketch to its DataSketches-compatible byte image.</summary>
     public abstract byte[] ToByteArray();
 }

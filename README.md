@@ -29,8 +29,8 @@ Early. Under construction; not yet published.
 | Theta update sketch, QuickSelect | Done — reproduces the TCK snapshots byte for byte from scratch |
 | Theta update sketch, Alpha (required by Puffin) | Done |
 | Theta union | Done |
-| Theta error bounds (`BinomialBoundsN`) | Next |
-| Theta intersection / A-not-B | Planned |
+| Theta error bounds | Done — matches the reference to 1e-15 across ~38M evaluations |
+| Theta intersection / A-not-B | Next |
 | Delta-compressed Theta (serialization version 4) | Planned |
 | HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`, union) | Planned |
 
@@ -57,6 +57,13 @@ byte[] blob = sketch.Compact().ToByteArray();
 // Read one back — written by us, by Spark, by Trino, by anything.
 var loaded = CompactThetaSketch.Deserialize(blob);
 Console.WriteLine(loaded.Estimate);
+```
+
+Every sketch can report how much to trust its estimate:
+
+```csharp
+// ~95% confidence by default; pass 1 or 3 for ~68% or ~99.7%.
+Console.WriteLine($"{sketch.GetLowerBound()} .. {sketch.GetUpperBound()}");
 ```
 
 Sketches built independently merge exactly — which is the reason to use Theta
