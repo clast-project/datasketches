@@ -30,8 +30,9 @@ Early. Under construction; not yet published.
 | Theta update sketch, Alpha (required by Puffin) | Done |
 | Theta union, intersection, A-not-B | Done |
 | Theta error bounds | Done — matches the reference to 1e-15 across ~38M evaluations |
+| HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`) | Done — reproduces all 24 TCK snapshots byte for byte |
+| HLL union | Next |
 | Delta-compressed Theta (serialization version 4) | Planned |
-| HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`, union) | Next |
 
 Compatibility is tested against [apache/datasketches-tck](https://github.com/apache/datasketches-tck),
 the project's own cross-language serialization snapshots — the same images the
@@ -97,6 +98,29 @@ var sketch = UpdateThetaSketch.Builder()
     .SetNominalEntries(4096)
     .Build();
 ```
+
+### HLL
+
+When all you need is a distinct count, HLL is markedly more compact than Theta
+for the same accuracy — Theta earns its extra space by supporting intersection
+and set difference, which HLL cannot do.
+
+```csharp
+using Clast.Sketches.Hll;
+
+var sketch = new HllSketch(lgConfigK: 12, TgtHllType.Hll4);
+foreach (var value in values)
+    sketch.Update(value);
+
+Console.WriteLine($"{sketch.Estimate} ({sketch.GetLowerBound()}..{sketch.GetUpperBound()})");
+
+byte[] blob = sketch.ToCompactByteArray();
+var loaded = HllSketch.Deserialize(blob);
+```
+
+This is the DataSketches HLL — what Spark's `hll_sketch_agg` produces — not the
+HyperLogLog++ of the Google paper, which is a different algorithm with a
+different wire format.
 
 ## Target frameworks
 
