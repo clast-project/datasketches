@@ -5,7 +5,9 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using Clast.Sketches;
 
-BenchmarkSwitcher.FromAssembly(typeof(MurmurHash3Benchmarks).Assembly).Run(args);
+// Reflection rather than typeof(...): top-level statements already define
+// Program, and naming any one benchmark class here would hide the others.
+BenchmarkSwitcher.FromAssembly(System.Reflection.Assembly.GetExecutingAssembly()).Run(args);
 
 [MemoryDiagnoser]
 public class MurmurHash3Benchmarks

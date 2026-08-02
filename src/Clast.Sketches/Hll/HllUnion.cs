@@ -204,16 +204,33 @@ public sealed class HllUnion
     private static void MergeHllToHllMode(HllSketch source, HllSketch target)
     {
         var src = (HllArray)source.Impl;
-        var tgt = (HllArray)target.Impl;
-
-        int srcK = 1 << src.LgConfigK;
-        int tgtKmask = (1 << tgt.LgConfigK) - 1;
+        var tgt = (Hll8Array)target.Impl;
 
         // Deliberately skips the HIP and KxQ bookkeeping per register; the flag
         // below makes them get recomputed in one pass before anyone reads them.
-        for (int i = 0; i < srcK; i++)
+        if (src is Hll8Array src8)
         {
-            tgt.UpdateSlotNoKxQ(i & tgtKmask, src.GetSlotValue(i));
+            // Both sides are a byte per register, so the merge is an element-wise
+            // maximum over two arrays and needs no per-register decoding at all.
+            HllRegisters.MaxIntoFolded(src8.ByteArray, tgt.ByteArray);
+        }
+        else
+        {
+            // A packed source has to be decoded a register at a time, but the
+            // target is still written directly.
+            byte[] tgtArr = tgt.ByteArray;
+            int srcK = 1 << src.LgConfigK;
+            int tgtKmask = tgtArr.Length - 1;
+
+            for (int i = 0; i < srcK; i++)
+            {
+                int value = src.GetSlotValue(i);
+                int j = i & tgtKmask;
+                if (value > tgtArr[j])
+                {
+                    tgtArr[j] = (byte)value;
+                }
+            }
         }
 
         tgt.RebuildCurMinNumKxQ = true;
@@ -260,15 +277,21 @@ public sealed class HllUnion
             return;
         }
 
+        // Reads the register bytes directly rather than through the virtual
+        // accessor, but keeps the reference's per-register accumulation order.
+        // Summing by value instead would be far fewer operations, and wrong to
+        // do: KxQ is serialized, and floating-point addition is not associative,
+        // so reassociating would drift from the reference in the low bits.
+        byte[] registers = ((Hll8Array)array).ByteArray;
+
         int curMin = 64;
         int numAtCurMin = 0;
         double kxq0 = 1 << array.LgConfigK;
         double kxq1 = 0;
-        int configK = 1 << array.LgConfigK;
 
-        for (int i = 0; i < configK; i++)
+        foreach (byte register in registers)
         {
-            int v = array.GetSlotValue(i);
+            int v = register & HllUtil.ValMask6;
             if (v > 0)
             {
                 // Each register contributes 2^-v; the initial k already counts

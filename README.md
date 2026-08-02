@@ -142,6 +142,10 @@ foreach (var blob in blobs)
 HllSketch merged = union.GetResult();
 ```
 
+Merging `HLL_8` sketches is AVX2- and ARM NEON-accelerated, with a portable
+fallback; the register array is a byte per register, so a merge is an
+element-wise maximum.
+
 This is the DataSketches HLL — what Spark's `hll_sketch_agg` produces — not the
 HyperLogLog++ of the Google paper, which is a different algorithm with a
 different wire format.
