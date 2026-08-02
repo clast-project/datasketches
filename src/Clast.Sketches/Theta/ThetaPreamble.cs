@@ -56,7 +56,19 @@ internal static class ThetaPreamble
     public const int SerVer = 3;
 
     /// <summary>Serialization version of the delta-compressed compact form.</summary>
-    public const int SerVerCompressed = 4;
+    public const byte SerVerCompressed = 4;
+
+    // Fields unique to the compressed form, which reuses bytes 3 and 4 for its
+    // own purposes and moves theta up to byte 8.
+
+    /// <summary>Bit width of each packed gap, 1..63.</summary>
+    public const int EntryBitsByte = 3;
+
+    /// <summary>Number of whole bytes the retained count occupies, 1..4.</summary>
+    public const int NumEntriesBytesByte = 4;
+
+    /// <summary>Theta's offset in a compressed image, present only when estimating.</summary>
+    public const int ThetaLongCompressed = 8;
 
     /// <summary>
     /// The canonical 8-byte image of an empty compact sketch. Note the seed hash

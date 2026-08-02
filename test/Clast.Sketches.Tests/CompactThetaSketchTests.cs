@@ -217,12 +217,15 @@ public class CompactThetaSketchTests
     }
 
     [Fact]
-    public void ReportsCompressedFormAsUnsupported()
+    public void RejectsPlainImageMislabelledAsCompressed()
     {
+        // Version 4 reuses bytes 3 and 4 for the entry and count widths, so a
+        // version 3 image relabelled as compressed is read as nonsense and must
+        // be rejected rather than silently decoded.
         byte[] image = TckData.Load("theta_n100_java.sk");
         image[1] = 4;
 
-        Assert.Throws<NotSupportedException>(() => CompactThetaSketch.Deserialize(image));
+        Assert.Throws<InvalidDataException>(() => CompactThetaSketch.Deserialize(image));
     }
 
     private static void AssertWellFormed(CompactThetaSketch sketch, int n)

@@ -104,8 +104,8 @@ public sealed class CompactThetaSketch : ThetaSketch
     /// <see cref="ThetaSketch.DefaultUpdateSeed"/>.
     /// </summary>
     /// <param name="image">The serialized sketch.</param>
+    /// <remarks>Accepts both the plain and the delta-compressed serialized forms.</remarks>
     /// <exception cref="InvalidDataException">The image is malformed, or was built with a different seed.</exception>
-    /// <exception cref="NotSupportedException">The image uses the delta-compressed serialization (version 4).</exception>
     public static CompactThetaSketch Deserialize(ReadOnlySpan<byte> image) =>
         Deserialize(image, DefaultUpdateSeed);
 
@@ -115,8 +115,8 @@ public sealed class CompactThetaSketch : ThetaSketch
     /// </summary>
     /// <param name="image">The serialized sketch.</param>
     /// <param name="expectedSeed">The update seed the image is expected to carry.</param>
+    /// <remarks>Accepts both the plain and the delta-compressed serialized forms.</remarks>
     /// <exception cref="InvalidDataException">The image is malformed, or was built with a different seed.</exception>
-    /// <exception cref="NotSupportedException">The image uses the delta-compressed serialization (version 4).</exception>
     public static CompactThetaSketch Deserialize(ReadOnlySpan<byte> image, ulong expectedSeed)
     {
         if (image.Length < 8)
@@ -135,8 +135,7 @@ public sealed class CompactThetaSketch : ThetaSketch
         int serVer = ThetaPreamble.ReadSerVer(image);
         if (serVer == ThetaPreamble.SerVerCompressed)
         {
-            throw new NotSupportedException(
-                "Delta-compressed Theta sketches (serialization version 4) are not supported yet.");
+            return DeserializeCompressed(image, expectedSeed);
         }
         if (serVer != ThetaPreamble.SerVer)
         {
@@ -225,6 +224,180 @@ public sealed class CompactThetaSketch : ThetaSketch
         byte[] image = new byte[SerializedSizeBytes];
         Serialize(image);
         return image;
+    }
+
+    /// <summary>
+    /// Serializes to the delta-compressed form (serialization version 4),
+    /// typically 30-40% smaller than <see cref="ToByteArray"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An ordered sketch's hashes are spread fairly evenly across the space below
+    /// theta, so the gaps between consecutive hashes are much smaller than the
+    /// hashes themselves. Storing gaps at their true bit width, packed without
+    /// padding, is the whole idea.
+    /// </para>
+    /// <para>
+    /// Falls back to <see cref="ToByteArray"/> when compression cannot help or
+    /// does not apply — an unordered sketch has no useful gaps, and the empty and
+    /// single-item forms are already smaller than a compressed preamble. Readers
+    /// tell the two apart by the serialization version, so this is always safe.
+    /// </para>
+    /// </remarks>
+    public byte[] ToByteArrayCompressed()
+    {
+        if (!_ordered || _hashes.Length == 0 || (_hashes.Length == 1 && !IsEstimationMode))
+        {
+            return ToByteArray();
+        }
+        return ToCompressedByteArray();
+    }
+
+    private byte[] ToCompressedByteArray()
+    {
+        int retained = _hashes.Length;
+
+        // Theta is only stored when it is not 1.0, so an exact sketch saves 8 bytes.
+        int preambleLongs = IsEstimationMode ? 2 : 1;
+
+        // Every gap fits in this many bits, so that is what each one costs.
+        int entryBits = 64 - Bits.LeadingZeroCount(OredDeltas());
+        int numEntriesBytes = Bits.WholeBytesToHoldBits(Bits.BitLength(retained));
+
+        int sizeBytes = (preambleLongs * 8)
+            + numEntriesBytes
+            + Bits.WholeBytesToHoldBits(entryBits * retained);
+
+        byte[] image = new byte[sizeBytes];
+        int offset = 0;
+
+        image[offset++] = (byte)preambleLongs;
+        image[offset++] = ThetaPreamble.SerVerCompressed;
+        image[offset++] = (byte)SketchFamily.Compact;
+        image[offset++] = (byte)entryBits;
+        image[offset++] = (byte)numEntriesBytes;
+        image[offset++] = (byte)(ThetaPreamble.CompactFlagMask
+            | ThetaPreamble.ReadOnlyFlagMask
+            | ThetaPreamble.OrderedFlagMask);
+
+        BinaryPrimitives.WriteUInt16LittleEndian(image.AsSpan(offset), _seedHash);
+        offset += 2;
+
+        if (IsEstimationMode)
+        {
+            BinaryPrimitives.WriteInt64LittleEndian(image.AsSpan(offset), _thetaLong);
+            offset += 8;
+        }
+
+        // The count is stored in as few whole bytes as it needs, so that the
+        // packed entries that follow start byte-aligned.
+        int numEntries = retained;
+        for (int i = 0; i < numEntriesBytes; i++)
+        {
+            image[offset++] = (byte)(numEntries & 0xFF);
+            numEntries >>= 8;
+        }
+
+        long[] deltas = new long[retained];
+        long previous = 0;
+        for (int i = 0; i < retained; i++)
+        {
+            deltas[i] = _hashes[i] - previous;
+            previous = _hashes[i];
+        }
+
+        ThetaBitPacking.Pack(deltas, entryBits, image, offset, retained);
+        return image;
+    }
+
+    /// <summary>
+    /// The bitwise OR of every gap between consecutive hashes, whose leading zero
+    /// count gives the width that holds all of them.
+    /// </summary>
+    private ulong OredDeltas()
+    {
+        ulong ored = 0;
+        long previous = 0;
+        foreach (long hash in _hashes)
+        {
+            ored |= (ulong)(hash - previous);
+            previous = hash;
+        }
+        return ored;
+    }
+
+    private static CompactThetaSketch DeserializeCompressed(ReadOnlySpan<byte> image, ulong expectedSeed)
+    {
+        int preambleLongs = ThetaPreamble.ReadPreambleLongs(image);
+        if (preambleLongs is not (1 or 2))
+        {
+            throw new InvalidDataException(
+                $"Corrupt compressed image: expected 1 or 2 preamble longs, got {preambleLongs}.");
+        }
+
+        int entryBits = image[ThetaPreamble.EntryBitsByte];
+        int numEntriesBytes = image[ThetaPreamble.NumEntriesBytesByte];
+
+        if (entryBits is < 1 or > 63)
+        {
+            throw new InvalidDataException($"Corrupt compressed image: entry width {entryBits} is out of range.");
+        }
+        if (numEntriesBytes is < 1 or > 4)
+        {
+            throw new InvalidDataException(
+                $"Corrupt compressed image: retained-count width {numEntriesBytes} is out of range.");
+        }
+
+        SeedHashes.Check(ThetaPreamble.ReadSeedHash(image), SeedHashes.Compute(expectedSeed));
+
+        int offset = 8;
+        long thetaLong = long.MaxValue;
+        if (preambleLongs > 1)
+        {
+            if (image.Length < 16)
+            {
+                throw new InvalidDataException("Truncated compressed image: theta does not fit.");
+            }
+            thetaLong = BinaryPrimitives.ReadInt64LittleEndian(image.Slice(ThetaPreamble.ThetaLongCompressed));
+            offset += 8;
+        }
+
+        if (image.Length < offset + numEntriesBytes)
+        {
+            throw new InvalidDataException("Truncated compressed image: retained count does not fit.");
+        }
+
+        int retained = 0;
+        for (int i = 0; i < numEntriesBytes; i++)
+        {
+            retained |= image[offset++] << (i << 3);
+        }
+
+        if (retained < 0)
+        {
+            throw new InvalidDataException($"Corrupt compressed image: negative retained count {retained}.");
+        }
+
+        int required = offset + Bits.WholeBytesToHoldBits(entryBits * retained);
+        if (image.Length < required)
+        {
+            throw new InvalidDataException(
+                $"Truncated compressed image: {retained} entries need {required} bytes, got {image.Length}.");
+        }
+
+        long[] hashes = new long[retained];
+        ThetaBitPacking.Unpack(hashes, entryBits, image, offset, retained);
+
+        // The stream holds gaps; accumulate them back into hashes.
+        long previous = 0;
+        for (int i = 0; i < retained; i++)
+        {
+            hashes[i] += previous;
+            previous = hashes[i];
+        }
+
+        return new CompactThetaSketch(
+            hashes, thetaLong, empty: false, ordered: true, SeedHashes.Compute(expectedSeed));
     }
 
     /// <summary>

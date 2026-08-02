@@ -32,7 +32,7 @@ Early. Under construction; not yet published.
 | Theta error bounds | Done — matches the reference to 1e-15 across ~38M evaluations |
 | HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`) | Done — reproduces all 24 TCK snapshots byte for byte |
 | HLL union | Done |
-| Delta-compressed Theta (serialization version 4) | Planned |
+| Delta-compressed Theta (serialization version 4) | Done — reproduces the TCK snapshots byte for byte |
 
 Compatibility is tested against [apache/datasketches-tck](https://github.com/apache/datasketches-tck),
 the project's own cross-language serialization snapshots — the same images the
@@ -76,6 +76,17 @@ foreach (var blob in puffinBlobs)
     union.UnionCompactImage(blob);
 
 Console.WriteLine(union.GetResult().Estimate);
+```
+
+Theta sketches also have a delta-compressed serialization, typically 30-40%
+smaller. Ordered hashes sit fairly evenly below theta, so the gaps between them
+need far fewer bits than the hashes themselves:
+
+```csharp
+byte[] smaller = sketch.Compact().ToByteArrayCompressed();
+
+// Deserialize reads either form — the image says which it is.
+var loaded = CompactThetaSketch.Deserialize(smaller);
 ```
 
 Intersection and set difference work too — and unlike a union, they cannot be

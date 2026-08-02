@@ -102,26 +102,10 @@ internal static class HllUtil
 
     /// <summary>
     /// Counts leading zero bits of a 64-bit value, matching Java's
-    /// <c>Long.numberOfLeadingZeros</c>.
+    /// <c>Long.numberOfLeadingZeros</c>. The count feeds directly into the
+    /// register value, so an off-by-one here changes every estimate.
     /// </summary>
-    /// <remarks>
-    /// Hand-rolled because <c>System.Numerics.BitOperations</c> is unavailable on
-    /// netstandard2.0, and the count feeds directly into the register value — an
-    /// off-by-one here changes every estimate.
-    /// </remarks>
-    public static int NumberOfLeadingZeros(ulong value)
-    {
-        if (value == 0) { return 64; }
-
-        int n = 0;
-        if ((value >> 32) == 0) { n += 32; value <<= 32; }
-        if ((value >> 48) == 0) { n += 16; value <<= 16; }
-        if ((value >> 56) == 0) { n += 8; value <<= 8; }
-        if ((value >> 60) == 0) { n += 4; value <<= 4; }
-        if ((value >> 62) == 0) { n += 2; value <<= 2; }
-        if ((value >> 63) == 0) { n += 1; }
-        return n;
-    }
+    public static int NumberOfLeadingZeros(ulong value) => Bits.LeadingZeroCount(value);
 
     /// <summary>Base-2 logarithm of a value known to be an exact power of two.</summary>
     public static int ExactLog2(int powerOfTwo)
