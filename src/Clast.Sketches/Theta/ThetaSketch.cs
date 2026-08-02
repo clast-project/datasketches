@@ -49,6 +49,17 @@ public abstract class ThetaSketch
     /// <summary>The number of hashes the sketch is currently holding.</summary>
     public abstract int RetainedEntries { get; }
 
+    /// <summary>The 16-bit hash of the update seed this sketch was built with.</summary>
+    public abstract ushort SeedHash { get; }
+
+    /// <summary>
+    /// The sketch's raw backing array. For a compact sketch this is the gap-free
+    /// hash list; for an update sketch it is the hash table, so it may hold
+    /// zeros (empty slots) and, transiently, values at or above theta. Consumers
+    /// must filter.
+    /// </summary>
+    internal abstract long[] HashCache { get; }
+
     /// <summary>
     /// Theta in its stored form, a positive <see cref="long"/> where
     /// <see cref="long.MaxValue"/> represents 1.0.

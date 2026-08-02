@@ -28,8 +28,9 @@ Early. Under construction; not yet published.
 | Compact Theta sketch: read, estimate, serialize | Done — round-trips the TCK snapshots byte for byte |
 | Theta update sketch, QuickSelect | Done — reproduces the TCK snapshots byte for byte from scratch |
 | Theta update sketch, Alpha (required by Puffin) | Done |
+| Theta union | Done |
 | Theta error bounds (`BinomialBoundsN`) | Next |
-| Theta union / intersection / A-not-B | Planned |
+| Theta intersection / A-not-B | Planned |
 | Delta-compressed Theta (serialization version 4) | Planned |
 | HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`, union) | Planned |
 
@@ -56,6 +57,18 @@ byte[] blob = sketch.Compact().ToByteArray();
 // Read one back — written by us, by Spark, by Trino, by anything.
 var loaded = CompactThetaSketch.Deserialize(blob);
 Console.WriteLine(loaded.Estimate);
+```
+
+Sketches built independently merge exactly — which is the reason to use Theta
+over a plain counter. Counting distinct values across a hundred Iceberg
+partitions becomes a hundred cheap merges instead of a rescan:
+
+```csharp
+var union = new ThetaUnion(nominalEntries: 4096);
+foreach (var blob in puffinBlobs)
+    union.UnionCompactImage(blob);
+
+Console.WriteLine(union.GetResult().Estimate);
 ```
 
 Puffin specifies the Alpha family, which is more accurate standalone:

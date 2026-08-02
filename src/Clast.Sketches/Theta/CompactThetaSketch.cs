@@ -70,8 +70,11 @@ public sealed class CompactThetaSketch : ThetaSketch
     /// </summary>
     public ReadOnlySpan<long> HashValues => _hashes;
 
-    /// <summary>The 16-bit hash of the update seed this sketch was built with.</summary>
-    public ushort SeedHash => _seedHash;
+    /// <inheritdoc/>
+    public override ushort SeedHash => _seedHash;
+
+    /// <inheritdoc/>
+    internal override long[] HashCache => _hashes;
 
     /// <summary>The number of bytes <see cref="ToByteArray"/> will produce.</summary>
     public int SerializedSizeBytes => (PreambleLongs + _hashes.Length) << 3;

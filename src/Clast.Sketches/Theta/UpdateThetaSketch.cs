@@ -44,6 +44,7 @@ public enum ThetaUpdateResult
 public abstract class UpdateThetaSketch : ThetaSketch
 {
     private readonly ulong _seed;
+    private readonly ushort _seedHash;
     private readonly int _lgNominalEntries;
     private readonly float _samplingProbability;
     private readonly ResizeFactor _resizeFactor;
@@ -53,6 +54,8 @@ public abstract class UpdateThetaSketch : ThetaSketch
     {
         _lgNominalEntries = Math.Max(lgNominalEntries, ThetaLimits.MinLgNominalEntries);
         _seed = seed;
+        // Computed once: a union checks it on every incoming sketch.
+        _seedHash = SeedHashes.Compute(seed);
         _samplingProbability = samplingProbability;
         _resizeFactor = resizeFactor;
     }
@@ -75,8 +78,8 @@ public abstract class UpdateThetaSketch : ThetaSketch
     /// <summary>How aggressively the internal hash table grows.</summary>
     public ResizeFactor ResizeFactor => _resizeFactor;
 
-    /// <summary>The 16-bit hash of this sketch's update seed.</summary>
-    public ushort SeedHash => SeedHashes.Compute(_seed);
+    /// <inheritdoc/>
+    public override ushort SeedHash => _seedHash;
 
     /// <summary>Presents a 64-bit integer to the sketch.</summary>
     public ThetaUpdateResult Update(long datum) => HashUpdate(HashOf(datum));
@@ -143,7 +146,7 @@ public abstract class UpdateThetaSketch : ThetaSketch
     {
         int retained = RetainedEntries;
         long thetaLong = ThetaLong;
-        long[] hashes = ThetaHashTable.CompactCache(Cache, retained, thetaLong, ordered);
+        long[] hashes = ThetaHashTable.CompactCache(HashCache, retained, thetaLong, ordered);
         return new CompactThetaSketch(hashes, thetaLong, IsEmpty, ordered, SeedHash);
     }
 
@@ -161,20 +164,20 @@ public abstract class UpdateThetaSketch : ThetaSketch
     /// <summary>Returns the sketch to its initial empty state, reusing its storage where possible.</summary>
     public abstract void Reset();
 
-    /// <summary>The hash table backing this sketch, including empty slots.</summary>
-    private protected abstract long[] Cache { get; }
+    /// <summary>Number of preamble longs this sketch serializes with.</summary>
+    internal virtual int CurrentPreambleLongs => 3;
 
     /// <summary>Base-2 logarithm of the current hash table length.</summary>
-    private protected abstract int LgArrLongs { get; }
+    internal abstract int LgArrLongs { get; }
 
     /// <summary>True if the table may hold entries at or above theta that have not been swept out yet.</summary>
-    private protected abstract bool IsDirty { get; }
+    internal abstract bool IsDirty { get; }
 
     /// <summary>Offers an already-computed 63-bit hash to the sketch.</summary>
-    private protected abstract ThetaUpdateResult HashUpdate(long hash);
+    internal abstract ThetaUpdateResult HashUpdate(long hash);
 
     /// <summary>Replaces this sketch's state with one read from a serialized image.</summary>
-    private protected abstract void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache);
+    internal abstract void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache);
 
     /// <summary>
     /// Reads a serialized update sketch, assuming the
@@ -322,7 +325,7 @@ public abstract class UpdateThetaSketch : ThetaSketch
                 $"Corrupt state: a sketch flagged empty cannot retain {retained} entries.");
         }
 
-        const int preambleLongs = 3;
+        int preambleLongs = CurrentPreambleLongs;
         int arrLongs = 1 << LgArrLongs;
         byte[] image = new byte[(preambleLongs + arrLongs) << 3];
 
@@ -344,7 +347,7 @@ public abstract class UpdateThetaSketch : ThetaSketch
         ThetaPreamble.WriteThetaLong(image, IsEmpty && retained == 0 ? long.MaxValue : ThetaLong);
 
         Span<byte> data = image.AsSpan(preambleLongs << 3);
-        long[] cache = Cache;
+        long[] cache = HashCache;
         for (int i = 0; i < arrLongs; i++)
         {
             System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(data.Slice(i << 3), cache[i]);

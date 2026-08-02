@@ -66,14 +66,20 @@ internal sealed class QuickSelectThetaSketch : UpdateThetaSketch
     /// </summary>
     public override long ThetaLong => _empty ? long.MaxValue : _thetaLong;
 
-    private protected override long[] Cache => _cache;
+    internal override long[] HashCache => _cache;
 
-    private protected override int LgArrLongs => _lgArrLongs;
+    /// <summary>
+    /// A union's gadget carries a fourth preamble long for the union's own
+    /// theta, which is tracked separately from the gadget's.
+    /// </summary>
+    internal override int CurrentPreambleLongs => _family == SketchFamily.Union ? 4 : 3;
+
+    internal override int LgArrLongs => _lgArrLongs;
 
     /// <summary>QuickSelect sweeps as part of the rebuild, so its table is never left dirty.</summary>
-    private protected override bool IsDirty => false;
+    internal override bool IsDirty => false;
 
-    private protected override ThetaUpdateResult HashUpdate(long hash)
+    internal override ThetaUpdateResult HashUpdate(long hash)
     {
         ThetaHashTable.CheckHashCorruption(hash);
         _empty = false;
@@ -105,7 +111,7 @@ internal sealed class QuickSelectThetaSketch : UpdateThetaSketch
         return ThetaUpdateResult.Inserted;
     }
 
-    private protected override void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache)
+    internal override void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache)
     {
         _lgArrLongs = lgArrLongs;
         _hashTableThreshold = ThetaLimits.HashTableThreshold(LgNominalEntries, lgArrLongs);

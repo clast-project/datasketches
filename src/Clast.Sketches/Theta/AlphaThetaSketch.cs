@@ -98,13 +98,13 @@ internal sealed class AlphaThetaSketch : UpdateThetaSketch
             ? _curCount * ((double)long.MaxValue / _thetaLong)
             : (1 << LgNominalEntries) * ((double)long.MaxValue / _thetaLong);
 
-    private protected override long[] Cache => _cache;
+    internal override long[] HashCache => _cache;
 
-    private protected override int LgArrLongs => _lgArrLongs;
+    internal override int LgArrLongs => _lgArrLongs;
 
-    private protected override bool IsDirty => _dirty;
+    internal override bool IsDirty => _dirty;
 
-    private protected override ThetaUpdateResult HashUpdate(long hash)
+    internal override ThetaUpdateResult HashUpdate(long hash)
     {
         ThetaHashTable.CheckHashCorruption(hash);
         _empty = false;
@@ -220,7 +220,7 @@ internal sealed class AlphaThetaSketch : UpdateThetaSketch
         return ThetaUpdateResult.Inserted;
     }
 
-    private protected override void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache)
+    internal override void LoadState(int lgArrLongs, int retained, long thetaLong, bool empty, long[] cache)
     {
         _lgArrLongs = lgArrLongs;
         _hashTableThreshold = ThetaLimits.HashTableThreshold(LgNominalEntries, lgArrLongs);
