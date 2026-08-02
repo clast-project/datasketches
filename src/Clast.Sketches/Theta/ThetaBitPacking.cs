@@ -75,17 +75,21 @@ internal static class ThetaBitPacking
         bufOffset += availBits == chunkBits ? 1 : 0;
         bits -= chunkBits;
 
+        // The casts to uint are not redundant: a byte promotes to int, and OR-ing
+        // an int into a long sign-extends it. The values here are never negative,
+        // but the compiler cannot see that (CS0675), and an unsigned operand says
+        // so rather than suppressing the warning.
         while (bits >= 8)
         {
             value <<= 8;
-            value |= buffer[bufOffset++];
+            value |= (uint)buffer[bufOffset++];
             bits -= 8;
         }
 
         if (bits > 0)
         {
             value <<= bits;
-            value |= buffer[bufOffset] >> (8 - bits);
+            value |= (uint)(buffer[bufOffset] >> (8 - bits));
         }
 
         return value;
