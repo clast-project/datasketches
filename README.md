@@ -31,7 +31,7 @@ Early. Under construction; not yet published.
 | Theta union, intersection, A-not-B | Done |
 | Theta error bounds | Done — matches the reference to 1e-15 across ~38M evaluations |
 | HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`) | Done — reproduces all 24 TCK snapshots byte for byte |
-| HLL union | Next |
+| HLL union | Done |
 | Delta-compressed Theta (serialization version 4) | Planned |
 
 Compatibility is tested against [apache/datasketches-tck](https://github.com/apache/datasketches-tck),
@@ -116,6 +116,19 @@ Console.WriteLine($"{sketch.Estimate} ({sketch.GetLowerBound()}..{sketch.GetUppe
 
 byte[] blob = sketch.ToCompactByteArray();
 var loaded = HllSketch.Deserialize(blob);
+```
+
+HLL sketches merge too, and because registers hold a maximum the result is
+exactly the sketch you would have built over the union of the inputs — no error
+accumulates across merges. Sketches with different `k` or different register
+widths can be mixed freely:
+
+```csharp
+var union = new HllUnion(lgMaxK: 12);
+foreach (var blob in blobs)
+    union.Update(blob);
+
+HllSketch merged = union.GetResult();
 ```
 
 This is the DataSketches HLL — what Spark's `hll_sketch_agg` produces — not the

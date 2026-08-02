@@ -35,7 +35,12 @@ internal sealed class CouponList : HllSketchImpl
     }
 
     private CouponList(CouponList other)
-        : base(other.LgConfigK, other.TgtHllType, other.CurMode)
+        : this(other, other.TgtHllType)
+    {
+    }
+
+    private CouponList(CouponList other, TgtHllType tgtHllType)
+        : base(other.LgConfigK, tgtHllType, other.CurMode)
     {
         _lgCouponArrInts = other._lgCouponArrInts;
         _couponCount = other._couponCount;
@@ -171,6 +176,20 @@ internal sealed class CouponList : HllSketchImpl
     }
 
     public override HllSketchImpl Copy() => new CouponList(this);
+
+    /// <summary>
+    /// Coupon modes hold no registers, so changing the target width only changes
+    /// what the sketch will become once it promotes.
+    /// </summary>
+    public override HllSketchImpl CopyAs(TgtHllType tgtHllType) => new CouponList(this, tgtHllType);
+
+    public override void MergeTo(HllSketch target)
+    {
+        foreach (int coupon in ValidCoupons())
+        {
+            target.CouponUpdate(coupon);
+        }
+    }
 
     public override byte[] ToCompactByteArray() => HllSerialization.CouponsToByteArray(this, compact: true);
 

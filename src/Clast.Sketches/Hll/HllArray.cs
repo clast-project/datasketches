@@ -165,6 +165,50 @@ internal abstract class HllArray : HllSketchImpl
 
     public override byte[] ToUpdatableByteArray() => HllSerialization.HllToByteArray(this, compact: false);
 
+    /// <summary>
+    /// Raises a register without touching the running aggregates.
+    /// </summary>
+    /// <remarks>
+    /// Used by the union's register-wise merge, which would otherwise pay the HIP
+    /// and KxQ bookkeeping per register for aggregates it is about to invalidate
+    /// anyway. The caller must set <see cref="RebuildCurMinNumKxQ"/> so they are
+    /// recomputed before anyone reads an estimate.
+    /// </remarks>
+    public virtual void UpdateSlotNoKxQ(int slotNo, int newValue) =>
+        throw new InvalidOperationException(
+            "Register-wise merging is only supported into an HLL_8 array.");
+
+    /// <inheritdoc/>
+    public override HllSketchImpl CopyAs(TgtHllType tgtHllType)
+    {
+        if (tgtHllType == TgtHllType) { return Copy(); }
+        return tgtHllType switch
+        {
+            TgtHllType.Hll4 => Conversions.ConvertToHll4(this),
+            TgtHllType.Hll6 => Conversions.ConvertToHll6(this),
+            _ => Conversions.ConvertToHll8(this),
+        };
+    }
+
+    /// <inheritdoc/>
+    public override void MergeTo(HllSketch target) =>
+        throw new InvalidOperationException(
+            "An HLL-mode sketch has no coupons to replay; merge its registers instead.");
+
+    /// <summary>Enumerates the non-empty registers as (index, value) coupons.</summary>
+    public IEnumerable<int> ValidPairs()
+    {
+        int configK = 1 << LgConfigK;
+        for (int i = 0; i < configK; i++)
+        {
+            int value = GetSlotValue(i);
+            if (value != HllUtil.Empty)
+            {
+                yield return HllUtil.Pair(i, value);
+            }
+        }
+    }
+
     /// <summary>Enumerates every register value, including zeros.</summary>
     public IEnumerable<int> SlotValues()
     {

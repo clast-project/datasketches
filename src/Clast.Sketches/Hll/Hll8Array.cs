@@ -40,6 +40,13 @@ internal sealed class Hll8Array : HllArray
         }
     }
 
+    /// <inheritdoc/>
+    public override void UpdateSlotNoKxQ(int slotNo, int newValue)
+    {
+        int oldValue = GetSlotValue(slotNo);
+        HllByteArr[slotNo] = (byte)Math.Max(newValue, oldValue);
+    }
+
     public override HllSketchImpl Copy() => new Hll8Array(this);
 
     public static Hll8Array Deserialize(ReadOnlySpan<byte> image)

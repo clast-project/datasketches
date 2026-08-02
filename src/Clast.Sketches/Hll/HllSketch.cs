@@ -144,6 +144,36 @@ public sealed class HllSketch
     public HllSketch Copy() => new(_impl.Copy());
 
     /// <summary>
+    /// Returns a copy of this sketch using a different register width. Lossless:
+    /// the three widths are isomorphic and the estimate is unchanged.
+    /// </summary>
+    public HllSketch CopyAs(TgtHllType tgtHllType) => new(_impl.CopyAs(tgtHllType));
+
+    /// <summary>The sketch's current internal representation.</summary>
+    internal HllCurMode CurMode => _impl.CurMode;
+
+    /// <summary>True if the more accurate HIP estimator no longer applies.</summary>
+    internal bool IsOutOfOrder => _impl.IsOutOfOrder;
+
+    /// <summary>The state behind this sketch, for the union operator.</summary>
+    internal HllSketchImpl Impl => _impl;
+
+    /// <summary>Wraps an implementation the union has already built.</summary>
+    internal static HllSketch Wrap(HllSketchImpl impl) => new(impl);
+
+    /// <summary>Replays this sketch's coupons into <paramref name="target"/>.</summary>
+    internal void MergeTo(HllSketch target) => _impl.MergeTo(target);
+
+    /// <summary>Marks the sketch as no longer supporting the HIP estimator.</summary>
+    internal void SetOutOfOrder(bool value)
+    {
+        if (_impl is HllArray array)
+        {
+            array.SetOutOfOrder(value);
+        }
+    }
+
+    /// <summary>
     /// Serializes to the compact form — the one to persist, and what
     /// <c>toCompactByteArray</c> produces in the reference implementations.
     /// </summary>
@@ -165,7 +195,7 @@ public sealed class HllSketch
     /// </summary>
     private const ulong ThetaSketchSeed = Theta.ThetaSketch.DefaultUpdateSeed;
 
-    private void CouponUpdate(int coupon)
+    internal void CouponUpdate(int coupon)
     {
         // A zero value means the hash produced no usable register value, which
         // cannot happen for real input but is cheap to guard.

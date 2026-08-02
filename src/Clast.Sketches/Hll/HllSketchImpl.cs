@@ -68,6 +68,19 @@ internal abstract class HllSketchImpl
 
     public abstract HllSketchImpl Copy();
 
+    /// <summary>Returns a copy of this sketch using a different register width.</summary>
+    public abstract HllSketchImpl CopyAs(TgtHllType tgtHllType);
+
+    /// <summary>
+    /// Folds this sketch's contents into <paramref name="target"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the coupon modes support this: they replay their stored coupons
+    /// through the target's normal update path. An HLL-mode sketch has no coupons
+    /// left to replay and is merged register-wise by the union instead.
+    /// </remarks>
+    public abstract void MergeTo(HllSketch target);
+
     public abstract byte[] ToCompactByteArray();
 
     public abstract byte[] ToUpdatableByteArray();
