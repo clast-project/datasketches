@@ -76,6 +76,21 @@ public sealed class CompactThetaSketch : ThetaSketch
     /// <inheritdoc/>
     internal override long[] HashCache => _hashes;
 
+    /// <inheritdoc/>
+    public override CompactThetaSketch Compact(bool ordered)
+    {
+        // Already compact. Only a request to order an unordered sketch does work,
+        // and it copies rather than sorting in place — this type is immutable.
+        if (!ordered || _ordered)
+        {
+            return this;
+        }
+
+        long[] sorted = (long[])_hashes.Clone();
+        Array.Sort(sorted);
+        return new CompactThetaSketch(sorted, _thetaLong, _empty, ordered: true, _seedHash);
+    }
+
     /// <summary>The number of bytes <see cref="ToByteArray"/> will produce.</summary>
     public int SerializedSizeBytes => (PreambleLongs + _hashes.Length) << 3;
 

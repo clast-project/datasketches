@@ -28,11 +28,10 @@ Early. Under construction; not yet published.
 | Compact Theta sketch: read, estimate, serialize | Done — round-trips the TCK snapshots byte for byte |
 | Theta update sketch, QuickSelect | Done — reproduces the TCK snapshots byte for byte from scratch |
 | Theta update sketch, Alpha (required by Puffin) | Done |
-| Theta union | Done |
+| Theta union, intersection, A-not-B | Done |
 | Theta error bounds | Done — matches the reference to 1e-15 across ~38M evaluations |
-| Theta intersection / A-not-B | Next |
 | Delta-compressed Theta (serialization version 4) | Planned |
-| HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`, union) | Planned |
+| HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`, union) | Next |
 
 Compatibility is tested against [apache/datasketches-tck](https://github.com/apache/datasketches-tck),
 the project's own cross-language serialization snapshots — the same images the
@@ -77,6 +76,18 @@ foreach (var blob in puffinBlobs)
 
 Console.WriteLine(union.GetResult().Estimate);
 ```
+
+Intersection and set difference work too — and unlike a union, they cannot be
+computed from the estimates alone, only from the sketches:
+
+```csharp
+var shared  = ThetaIntersection.Of(monday, tuesday);   // seen on both days
+var newToday = ThetaAnotB.Of(tuesday, monday);         // seen only on Tuesday
+```
+
+Their results carry wider relative error than their operands, since a small
+intersection is recovered from two large sketches. Check the bounds before
+trusting a near-empty result.
 
 Puffin specifies the Alpha family, which is more accurate standalone:
 

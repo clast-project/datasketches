@@ -24,8 +24,8 @@ public enum ThetaUpdateResult
 }
 
 /// <summary>
-/// A mutable Theta sketch that accepts values. Call <see cref="Compact()"/> to
-/// get the immutable, serializable form.
+/// A mutable Theta sketch that accepts values. Call
+/// <see cref="ThetaSketch.Compact()"/> to get the immutable, serializable form.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -128,21 +128,8 @@ public abstract class UpdateThetaSketch : ThetaSketch
             ? ThetaUpdateResult.RejectedNullOrEmpty
             : HashUpdate((long)(MurmurHash3.Hash(datum, _seed).H1 >> 1));
 
-    /// <summary>
-    /// Returns the immutable, ordered compact form of this sketch — the one that
-    /// serializes.
-    /// </summary>
-    public CompactThetaSketch Compact() => Compact(ordered: true);
-
-    /// <summary>
-    /// Returns the immutable compact form of this sketch.
-    /// </summary>
-    /// <param name="ordered">
-    /// Whether to sort the retained hashes. Ordered is the default and what the
-    /// reference implementations produce; unordered saves the sort when the
-    /// result is about to be fed straight into a set operation.
-    /// </param>
-    public CompactThetaSketch Compact(bool ordered)
+    /// <inheritdoc/>
+    public override CompactThetaSketch Compact(bool ordered)
     {
         int retained = RetainedEntries;
         long thetaLong = ThetaLong;

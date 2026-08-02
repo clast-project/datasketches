@@ -104,6 +104,82 @@ internal static class ThetaHashTable
     }
 
     /// <summary>
+    /// Looks up <paramref name="hash"/> without inserting it.
+    /// </summary>
+    /// <returns>The index holding it, or -1 if it is absent.</returns>
+    public static int Search(ReadOnlySpan<long> table, int lgArrLongs, long hash)
+    {
+        if (hash == 0L)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hash), "The search hash must not be zero.");
+        }
+
+        int arrayMask = (1 << lgArrLongs) - 1;
+        int stride = Stride(hash, lgArrLongs);
+        int curProbe = (int)(hash & arrayMask);
+        int loopIndex = curProbe;
+
+        do
+        {
+            long value = table[curProbe];
+            if (value == 0L)
+            {
+                // An empty slot ends the probe path: had the value been inserted,
+                // it would have landed here or earlier.
+                return -1;
+            }
+            if (value == hash)
+            {
+                return curProbe;
+            }
+            curProbe = (curProbe + stride) & arrayMask;
+        }
+        while (curProbe != loopIndex);
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Inserts a hash known not to be present, skipping the duplicate check.
+    /// Used when rebuilding a table from values already known to be distinct.
+    /// </summary>
+    public static int InsertOnly(long[] table, int lgArrLongs, long hash)
+    {
+        int arrayMask = (1 << lgArrLongs) - 1;
+        int stride = Stride(hash, lgArrLongs);
+        int curProbe = (int)(hash & arrayMask);
+        int loopIndex = curProbe;
+
+        do
+        {
+            if (table[curProbe] == 0L)
+            {
+                table[curProbe] = hash;
+                return curProbe;
+            }
+            curProbe = (curProbe + stride) & arrayMask;
+        }
+        while (curProbe != loopIndex);
+
+        throw new InvalidOperationException("Theta hash table is full; no empty slot to insert into.");
+    }
+
+    /// <summary>
+    /// The smallest table size, as <c>lg(length)</c>, that holds
+    /// <paramref name="count"/> entries without exceeding the rebuild threshold.
+    /// </summary>
+    /// <remarks>
+    /// Set operations size their tables to the result rather than to a nominal
+    /// <c>k</c>: an intersection only shrinks, so carrying the larger operand's
+    /// table would waste both space and probe time.
+    /// </remarks>
+    public static int MinLgHashTableSize(int count, double rebuildThreshold)
+    {
+        int upperCount = (int)Math.Ceiling(count / rebuildThreshold);
+        return Math.Max(ThetaLimits.LgCeilingPowerOf2(upperCount), ThetaLimits.MinLgArrLongs);
+    }
+
+    /// <summary>
     /// Rebuilds <paramref name="destination"/> from <paramref name="source"/>,
     /// dropping empty slots, duplicates, and anything at or above theta.
     /// </summary>
@@ -146,11 +222,16 @@ internal static class ThetaHashTable
     /// Extracts the valid entries of a hash table into a gap-free array — the
     /// compact form.
     /// </summary>
-    /// <param name="table">The hash table. May contain empty slots and entries at or above theta.</param>
+    /// <param name="table">
+    /// The live portion of the hash table. May contain empty slots and entries
+    /// at or above theta. Callers whose table has shrunk must pass only the
+    /// portion still in use — the tail beyond it holds stale values that the
+    /// masked probe indices no longer reach.
+    /// </param>
     /// <param name="retained">The expected number of valid entries.</param>
     /// <param name="thetaLong">Entries at or above this are dropped.</param>
     /// <param name="ordered">Whether to sort the result ascending.</param>
-    public static long[] CompactCache(long[] table, int retained, long thetaLong, bool ordered)
+    public static long[] CompactCache(ReadOnlySpan<long> table, int retained, long thetaLong, bool ordered)
     {
         if (retained == 0)
         {

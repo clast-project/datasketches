@@ -138,6 +138,20 @@ public abstract class ThetaSketch
         }
     }
 
+    /// <summary>
+    /// Returns this sketch in immutable, ordered compact form — the form that
+    /// serializes.
+    /// </summary>
+    public CompactThetaSketch Compact() => Compact(ordered: true);
+
+    /// <summary>Returns this sketch in immutable compact form.</summary>
+    /// <param name="ordered">
+    /// Whether to sort the retained hashes. Ordered is what the reference
+    /// implementations emit; unordered saves the sort when the result feeds
+    /// straight into another set operation.
+    /// </param>
+    public abstract CompactThetaSketch Compact(bool ordered);
+
     /// <summary>Serializes the sketch to its DataSketches-compatible byte image.</summary>
     public abstract byte[] ToByteArray();
 }
