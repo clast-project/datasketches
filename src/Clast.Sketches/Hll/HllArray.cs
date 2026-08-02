@@ -195,6 +195,24 @@ internal abstract class HllArray : HllSketchImpl
         throw new InvalidOperationException(
             "An HLL-mode sketch has no coupons to replay; merge its registers instead.");
 
+    /// <summary>
+    /// Writes every register's value into <paramref name="destination"/>, one
+    /// byte each.
+    /// </summary>
+    /// <remarks>
+    /// One virtual call for the whole array instead of one per register, which
+    /// matters for the union: it walks every register on every merge. Subclasses
+    /// that can unpack in bulk override this.
+    /// </remarks>
+    public virtual void DecodeRegisters(Span<byte> destination)
+    {
+        int configK = 1 << LgConfigK;
+        for (int i = 0; i < configK; i++)
+        {
+            destination[i] = (byte)GetSlotValue(i);
+        }
+    }
+
     /// <summary>Enumerates the non-empty registers as (index, value) coupons.</summary>
     public IEnumerable<int> ValidPairs()
     {
@@ -244,10 +262,27 @@ internal abstract class HllArray : HllSketchImpl
     /// </remarks>
     public static void HipAndKxQIncrementalUpdate(HllArray host, int oldValue, int newValue)
     {
+        // Read before updating: the increment is the inverse probability of the
+        // event that just happened, which is measured against the prior state.
+        host.HipAccum += (1 << host.LgConfigK) / (host.KxQ0 + host.KxQ1);
+        KxQIncrementalUpdate(host, oldValue, newValue);
+    }
+
+    /// <summary>
+    /// The KxQ half of <see cref="HipAndKxQIncrementalUpdate"/>, without the HIP
+    /// accumulation.
+    /// </summary>
+    /// <remarks>
+    /// For callers that overwrite <see cref="HipAccum"/> afterwards — the
+    /// register-width conversions do, from the source sketch — accumulating it
+    /// per register is dead work, and it costs a floating-point division each
+    /// time. The KxQ arithmetic here is the same operations in the same order,
+    /// so the result is bit-for-bit what the full update would have left behind.
+    /// </remarks>
+    public static void KxQIncrementalUpdate(HllArray host, int oldValue, int newValue)
+    {
         double kxq0 = host.KxQ0;
         double kxq1 = host.KxQ1;
-
-        host.HipAccum += (1 << host.LgConfigK) / (kxq0 + kxq1);
 
         // Subtract the old contribution and add the new, each landing in whichever
         // register covers its magnitude.

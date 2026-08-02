@@ -36,7 +36,7 @@ internal static class Conversions
                 continue;
             }
 
-            HllArray.HipAndKxQIncrementalUpdate(target, 0, actualValue);
+            HllArray.KxQIncrementalUpdate(target, 0, actualValue);
 
             if (actualValue >= curMin + 15)
             {
@@ -77,16 +77,40 @@ internal static class Conversions
         int configK = 1 << src.LgConfigK;
         int numZeros = configK;
 
-        for (int slotNo = 0; slotNo < configK; slotNo++)
+        // The target is fresh, so every register goes from 0 exactly once. That
+        // makes the coupon path's extra bookkeeping redundant: its NumAtCurMin
+        // decrement is overwritten below, and its HIP accumulation is overwritten
+        // from the source. Only KxQ has to be accumulated, and in register order.
+        if (target is Hll8Array target8)
         {
-            int value = src.GetSlotValue(slotNo);
-            if (value == HllUtil.Empty)
+            // Fused rather than a bulk decode followed by a KxQ pass: splitting
+            // them measured slower, because the second pass re-reads a register
+            // array that no longer fits in L1.
+            byte[] registers = target8.ByteArray;
+            for (int slotNo = 0; slotNo < configK; slotNo++)
             {
-                continue;
+                int value = src.GetSlotValue(slotNo);
+                if (value == HllUtil.Empty)
+                {
+                    continue;
+                }
+                numZeros--;
+                registers[slotNo] = (byte)value;
+                HllArray.KxQIncrementalUpdate(target8, 0, value);
             }
-            numZeros--;
-            // Goes through the coupon path so KxQ is rebuilt as a side effect.
-            target.CouponUpdate(HllUtil.Pair(slotNo, value));
+        }
+        else
+        {
+            for (int slotNo = 0; slotNo < configK; slotNo++)
+            {
+                int value = src.GetSlotValue(slotNo);
+                if (value == HllUtil.Empty)
+                {
+                    continue;
+                }
+                numZeros--;
+                target.CouponUpdate(HllUtil.Pair(slotNo, value));
+            }
         }
 
         target.NumAtCurMin = numZeros;

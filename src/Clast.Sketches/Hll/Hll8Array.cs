@@ -47,6 +47,10 @@ internal sealed class Hll8Array : HllArray
         HllByteArr[slotNo] = (byte)Math.Max(newValue, oldValue);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Already one byte per register, so this is a copy.</remarks>
+    public override void DecodeRegisters(Span<byte> destination) => HllByteArr.CopyTo(destination);
+
     public override HllSketchImpl Copy() => new Hll8Array(this);
 
     public static Hll8Array Deserialize(ReadOnlySpan<byte> image)

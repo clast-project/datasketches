@@ -81,6 +81,57 @@ public class HllRegisterTests
     }
 
     [Theory]
+    [MemberData(nameof(Lengths))]
+    public void VectorAndScalarNibbleExpansionAgree(int packedLength)
+    {
+        var rng = new Random(packedLength);
+        byte[] packed = new byte[packedLength];
+        rng.NextBytes(packed);
+
+        const int curMin = 7;
+        byte[] viaVector = new byte[packedLength * 2];
+        byte[] viaScalar = new byte[packedLength * 2];
+
+        HllRegisters.ExpandNibbles(packed, curMin, viaVector);
+        HllRegisters.ExpandNibblesScalar(packed, curMin, viaScalar);
+
+        Assert.Equal(viaScalar, viaVector);
+
+        // Register 2i is the low nibble of packed byte i, register 2i+1 the high.
+        for (int i = 0; i < packedLength; i++)
+        {
+            Assert.Equal((packed[i] & 0x0F) + curMin, viaVector[i * 2]);
+            Assert.Equal(((packed[i] >> 4) & 0x0F) + curMin, viaVector[(i * 2) + 1]);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(40)]
+    public void NibbleExpansionHandlesEveryCurMin(int curMin)
+    {
+        byte[] packed = new byte[64];
+        for (int i = 0; i < packed.Length; i++)
+        {
+            packed[i] = (byte)i;
+        }
+
+        byte[] viaVector = new byte[128];
+        byte[] viaScalar = new byte[128];
+        HllRegisters.ExpandNibbles(packed, curMin, viaVector);
+        HllRegisters.ExpandNibblesScalar(packed, curMin, viaScalar);
+
+        Assert.Equal(viaScalar, viaVector);
+    }
+
+    [Fact]
+    public void NibbleExpansionRejectsAnUndersizedDestination()
+    {
+        Assert.Throws<ArgumentException>(() => HllRegisters.ExpandNibbles(new byte[16], 0, new byte[31]));
+    }
+
+    [Theory]
     [InlineData(64, 64)]
     [InlineData(128, 64)]
     [InlineData(4096, 512)]

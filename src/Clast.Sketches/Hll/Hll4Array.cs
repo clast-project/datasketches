@@ -66,6 +66,29 @@ internal sealed class Hll4Array : HllArray
     public override void UpdateSlotWithKxQ(int slotNo, int newValue) =>
         Hll4Update.InternalUpdate(this, slotNo, newValue);
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Expands every nibble in bulk, then corrects the exceptions. The bulk pass
+    /// gives <c>15 + curMin</c> for a register whose real value lives in the
+    /// auxiliary table, and the table holds precisely those slots — so patching
+    /// from it costs one write per exception rather than a branch per register.
+    /// </remarks>
+    public override void DecodeRegisters(Span<byte> destination)
+    {
+        HllRegisters.ExpandNibbles(HllByteArr, CurMin, destination);
+
+        if (AuxHashMap is null)
+        {
+            return;
+        }
+
+        int configKmask = (1 << LgConfigK) - 1;
+        foreach (int pair in AuxHashMap.Pairs())
+        {
+            destination[HllUtil.PairLow26(pair) & configKmask] = (byte)HllUtil.PairValue(pair);
+        }
+    }
+
     /// <summary>
     /// Creates the auxiliary table on first need, sized from the tabulated
     /// initial size for this lgK.

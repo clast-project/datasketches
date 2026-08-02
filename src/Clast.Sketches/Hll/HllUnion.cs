@@ -1,6 +1,8 @@
 // Copyright (c) clast-project. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
+using System.Buffers;
+
 namespace Clast.Sketches.Hll;
 
 /// <summary>
@@ -216,20 +218,20 @@ public sealed class HllUnion
         }
         else
         {
-            // A packed source has to be decoded a register at a time, but the
-            // target is still written directly.
-            byte[] tgtArr = tgt.ByteArray;
+            // Unpack the source once into a scratch buffer, then reuse the same
+            // vectorized maximum. Decoding in bulk and merging in bulk both beat
+            // interleaving the two a register at a time.
             int srcK = 1 << src.LgConfigK;
-            int tgtKmask = tgtArr.Length - 1;
-
-            for (int i = 0; i < srcK; i++)
+            byte[] scratch = ArrayPool<byte>.Shared.Rent(srcK);
+            try
             {
-                int value = src.GetSlotValue(i);
-                int j = i & tgtKmask;
-                if (value > tgtArr[j])
-                {
-                    tgtArr[j] = (byte)value;
-                }
+                Span<byte> decoded = scratch.AsSpan(0, srcK);
+                src.DecodeRegisters(decoded);
+                HllRegisters.MaxIntoFolded(decoded, tgt.ByteArray);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(scratch);
             }
         }
 
