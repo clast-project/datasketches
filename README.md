@@ -20,7 +20,9 @@ files](https://iceberg.apache.org/puffin-spec/) — Theta for the
 
 ## Status
 
-Early. Under construction; not yet published.
+First release. Theta and HLL are complete and compatibility-tested against the
+reference implementations. The public API may still shift before 1.0, which is
+why the version is 0.x — under 0.x semver the minor is the breaking slot.
 
 | Component | State |
 | --- | --- |
