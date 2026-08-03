@@ -298,15 +298,7 @@ public sealed class CompactThetaSketch : ThetaSketch
             numEntries >>= 8;
         }
 
-        long[] deltas = new long[retained];
-        long previous = 0;
-        for (int i = 0; i < retained; i++)
-        {
-            deltas[i] = _hashes[i] - previous;
-            previous = _hashes[i];
-        }
-
-        ThetaBitPacking.Pack(deltas, entryBits, image, offset, retained);
+        ThetaBitPacking.PackDeltas(_hashes, entryBits, image, offset);
         return image;
     }
 

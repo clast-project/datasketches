@@ -4,6 +4,8 @@
 // Port of org.apache.datasketches.theta.BitPacking from apache/datasketches-java.
 // See NOTICE.
 
+using System.Buffers.Binary;
+
 namespace Clast.Sketches.Theta;
 
 /// <summary>
@@ -14,17 +16,31 @@ namespace Clast.Sketches.Theta;
 /// <para>
 /// This backs the delta-compressed Theta form. An ordered compact sketch's
 /// hashes are close together relative to their magnitude, so the gaps between
-/// consecutive hashes need far fewer than 64 bits — typically 20 to 30 — and
+/// consecutive hashes need far fewer than 64 bits — typically 20 to 50 — and
 /// storing gaps at their true width is most of the compression.
 /// </para>
 /// <para>
 /// The reference implementation hand-unrolls this into 63 specialized routines,
-/// one per width, for speed. They produce exactly this bit stream; the TCK
-/// snapshots confirm it byte for byte.
+/// one per width, so that every shift is a compile-time constant and no value
+/// is ever assembled a byte at a time. The same end is reached here differently:
+/// because the stream is most-significant-bit first, the eight bytes starting at
+/// a value's own byte form a big-endian 64-bit window containing it, so each
+/// value costs one load and a pair of shifts regardless of width. It emits
+/// exactly the same bit stream, which the TCK snapshots confirm byte for byte.
 /// </para>
 /// </remarks>
 internal static class ThetaBitPacking
 {
+    /// <summary>
+    /// Widest entry the fast paths accept. A value begins at most 7 bits into a
+    /// byte, so both the reader's 64-bit window and the writer's accumulator can
+    /// hold one whole value plus that leading offset only up to 56 bits. Wider
+    /// entries fall back to the general routines — which happens only for
+    /// sketches small enough that it cannot matter, since a wide entry means
+    /// large gaps and therefore few of them.
+    /// </summary>
+    private const int MaxWindowBits = 56;
+
     /// <summary>
     /// Writes the low <paramref name="bits"/> bits of <paramref name="value"/>
     /// at the given byte and bit offset.
@@ -96,11 +112,103 @@ internal static class ThetaBitPacking
     }
 
     /// <summary>
-    /// Packs <paramref name="count"/> values of <paramref name="bits"/> bits each
-    /// into a contiguous stream starting at <paramref name="bufOffset"/>.
+    /// Packs the gaps between consecutive ascending hashes, computing them on the
+    /// way rather than from a prepared array.
     /// </summary>
+    /// <remarks>
+    /// Fused because the caller has no other use for the gaps: materializing them
+    /// first would cost an array as large as the sketch and a second pass over
+    /// it.
+    /// </remarks>
     /// <returns>The number of bytes written.</returns>
-    public static int Pack(ReadOnlySpan<long> values, int bits, byte[] buffer, int bufOffset, int count)
+    public static int PackDeltas(ReadOnlySpan<long> ascending, int bits, byte[] buffer, int bufOffset)
+    {
+        if (bits > MaxWindowBits)
+        {
+            return PackDeltasGeneral(ascending, bits, buffer, bufOffset);
+        }
+
+        // Writing uses an accumulator rather than the 64-bit window the reader
+        // uses. Consecutive values share bytes, so a windowed writer would load
+        // a word it had just stored to, and each overlapping load stalls on
+        // store-to-load forwarding. Measured 1.5x slower that way. Shifting
+        // bytes out of an accumulator writes each byte exactly once instead.
+        ulong accumulator = 0;
+        int accumulatedBits = 0;
+        int at = bufOffset;
+        long previous = 0;
+
+        foreach (long hash in ascending)
+        {
+            // Values are known to fit in `bits`: the entry width was chosen as
+            // the widest gap present, so no masking is needed.
+            accumulator |= (ulong)(hash - previous) << (64 - accumulatedBits - bits);
+            previous = hash;
+            accumulatedBits += bits;
+
+            while (accumulatedBits >= 8)
+            {
+                buffer[at++] = (byte)(accumulator >> 56);
+                accumulator <<= 8;
+                accumulatedBits -= 8;
+            }
+        }
+
+        if (accumulatedBits > 0)
+        {
+            buffer[at++] = (byte)(accumulator >> 56);
+        }
+
+        return at - bufOffset;
+    }
+
+    /// <summary>
+    /// How many leading values can be addressed through a full 64-bit window
+    /// without reading or writing past the end of the buffer.
+    /// </summary>
+    private static int WindowedCount(int bufferLength, int bufOffset, int bits, int count)
+    {
+        int slack = bufferLength - bufOffset - 8;
+        if (slack < 0)
+        {
+            return 0;
+        }
+
+        // The window for value i starts at byte (i * bits) / 8, which must be at
+        // most `slack` for its eight bytes to be in bounds.
+        long maxIndex = (((long)slack * 8) + 7) / bits;
+        return (int)Math.Min(count, maxIndex + 1);
+    }
+
+    /// <summary>Unpacks <paramref name="count"/> values of <paramref name="bits"/> bits each.</summary>
+    public static void Unpack(Span<long> values, int bits, ReadOnlySpan<byte> buffer, int bufOffset, int count)
+    {
+        int windowed = bits <= MaxWindowBits ? WindowedCount(buffer.Length, bufOffset, bits, count) : 0;
+
+        for (int i = 0; i < windowed; i++)
+        {
+            long bitPos = (long)i * bits;
+            int at = bufOffset + (int)(bitPos >> 3);
+            int bitOffset = (int)(bitPos & 7);
+
+            // One big-endian load per value: shift the value up to the top of the
+            // window, then down to the bottom. No per-byte work at all.
+            ulong word = BinaryPrimitives.ReadUInt64BigEndian(buffer.Slice(at));
+            values[i] = (long)((word << bitOffset) >> (64 - bits));
+        }
+
+        for (int i = windowed; i < count; i++)
+        {
+            long bitPos = (long)i * bits;
+            values[i] = UnpackBits(bits, buffer, bufOffset + (int)(bitPos >> 3), (int)(bitPos & 7));
+        }
+    }
+
+    /// <summary>
+    /// The general packer, one value at a time. Handles widths the accumulator
+    /// cannot take, and anchors the parity tests.
+    /// </summary>
+    public static int PackGeneral(ReadOnlySpan<long> values, int bits, byte[] buffer, int bufOffset, int count)
     {
         int start = bufOffset;
         int bitOffset = 0;
@@ -115,8 +223,9 @@ internal static class ThetaBitPacking
         return (bufOffset - start) + (bitOffset > 0 ? 1 : 0);
     }
 
-    /// <summary>Unpacks <paramref name="count"/> values of <paramref name="bits"/> bits each.</summary>
-    public static void Unpack(Span<long> values, int bits, ReadOnlySpan<byte> buffer, int bufOffset, int count)
+    /// <summary>The general unpacker, one value at a time.</summary>
+    public static void UnpackGeneral(
+        Span<long> values, int bits, ReadOnlySpan<byte> buffer, int bufOffset, int count)
     {
         int bitOffset = 0;
 
@@ -126,5 +235,22 @@ internal static class ThetaBitPacking
             bufOffset += (bitOffset + bits) >> 3;
             bitOffset = (bitOffset + bits) & 7;
         }
+    }
+
+    private static int PackDeltasGeneral(ReadOnlySpan<long> ascending, int bits, byte[] buffer, int bufOffset)
+    {
+        int start = bufOffset;
+        int bitOffset = 0;
+        long previous = 0;
+
+        foreach (long hash in ascending)
+        {
+            PackBits(hash - previous, bits, buffer, bufOffset, bitOffset);
+            previous = hash;
+            bufOffset += (bitOffset + bits) >> 3;
+            bitOffset = (bitOffset + bits) & 7;
+        }
+
+        return (bufOffset - start) + (bitOffset > 0 ? 1 : 0);
     }
 }
