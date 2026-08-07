@@ -17,6 +17,8 @@ produced by one engine and consumed by another.
 The initial target is the sketches that show up in [Apache Iceberg Puffin
 files](https://iceberg.apache.org/puffin-spec/) — Theta for the
 `apache-datasketches-theta-v1` blob, and HLL for engines that store NDV that way.
+KLL follows as the quantiles counterpart: the sketch behind Spark's
+`kll_sketch_agg_*` functions and the Druid and Pinot KLL aggregators.
 
 ## Status
 
@@ -35,6 +37,8 @@ why the version is 0.x — under 0.x semver the minor is the breaking slot.
 | HLL sketch (`HLL_4` / `HLL_6` / `HLL_8`) | Done — reproduces all 24 TCK snapshots byte for byte |
 | HLL union | Done |
 | Delta-compressed Theta (serialization version 4) | Done — reproduces the TCK snapshots byte for byte |
+| KLL quantiles sketch (`double` / `float`) | Done — reads every Java and C++ TCK snapshot and re-serializes it byte for byte |
+| KLL merge, quantiles, ranks, CDF/PMF | Done |
 
 Compatibility is tested against [apache/datasketches-tck](https://github.com/apache/datasketches-tck),
 the project's own cross-language serialization snapshots — the same images the
@@ -151,6 +155,59 @@ element-wise maximum.
 This is the DataSketches HLL — what Spark's `hll_sketch_agg` produces — not the
 HyperLogLog++ of the Google paper, which is a different algorithm with a
 different wire format.
+
+### KLL quantiles
+
+Theta and HLL answer "how many distinct". KLL answers "what does the
+distribution look like" — medians, percentiles, histograms — in space that does
+not grow with the stream:
+
+```csharp
+using Clast.Sketches.Quantiles;
+
+var sketch = new KllDoublesSketch();       // k = 200 by default
+foreach (var latency in latencies)
+    sketch.Update(latency);
+
+Console.WriteLine($"p50 {sketch.GetQuantile(0.5)}, p99 {sketch.GetQuantile(0.99)}");
+Console.WriteLine($"fraction under 250ms: {sketch.GetRank(250.0)}");
+```
+
+The error bound is on the **rank**, not the value: with the default `k` a
+reported rank is within about 1.33% of the truth at 99% confidence. Nothing
+bounds how far the returned value sits from the true quantile — where the
+distribution is flat, a small rank error spans a wide range of values. Ask the
+sketch what its bound is, which accounts for any smaller `k` merged in:
+
+```csharp
+double epsilon = sketch.GetNormalizedRankError(pmf: false);
+```
+
+A histogram comes out in one pass, rather than one `GetRank` call per bucket:
+
+```csharp
+double[] buckets = sketch.GetPMF([10.0, 50.0, 100.0, 500.0]);
+```
+
+Sketches merge, which is the reason to use one over sorting — a hundred
+partitions become a hundred cheap merges instead of a global sort:
+
+```csharp
+var merged = new KllDoublesSketch();
+foreach (var blob in blobs)
+    merged.Merge(KllDoublesSketch.Deserialize(blob));
+```
+
+`KllFloatsSketch` is the same sketch over `float`, and its images are about half
+the size. The two formats are distinct: neither reads the other, so pick the one
+that matches whatever produced the data. This is what Spark's
+`kll_sketch_agg_double` and `kll_sketch_agg_float` produce, and what the Druid
+and Pinot KLL aggregators store.
+
+One difference from Theta and HLL worth knowing: KLL compaction is randomized,
+so two sketches fed identical values do not generally serialize to identical
+bytes. Reading and re-writing an image is exact; rebuilding one from the same
+data is not.
 
 ## Target frameworks
 

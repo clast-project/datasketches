@@ -23,10 +23,10 @@
     <FileVersion Condition="!$(Version.Contains('-'))">$(Version)</FileVersion>
     <Authors>clast-project</Authors>
     <Company>clast-project</Company>
-    <Description>Streaming sketches with binary compatibility with the Apache DataSketches library: Theta (distinct counting, set operations) and HLL. Reads and writes the same serialized forms as datasketches-java and datasketches-cpp, including the compact Theta sketch stored in Apache Iceberg Puffin files. Targets netstandard2.0, net8.0, and net10.0.</Description>
+    <Description>Streaming sketches with binary compatibility with the Apache DataSketches library: Theta (distinct counting, set operations), HLL, and KLL (quantiles, percentiles, histograms). Reads and writes the same serialized forms as datasketches-java and datasketches-cpp, including the compact Theta sketch stored in Apache Iceberg Puffin files. Targets netstandard2.0, net8.0, and net10.0.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>sketch;datasketches;theta;hll;hyperloglog;cardinality;distinct-count;iceberg;puffin;probabilistic</PackageTags>
+    <PackageTags>sketch;datasketches;theta;hll;hyperloglog;kll;quantiles;percentile;histogram;cardinality;distinct-count;iceberg;puffin;probabilistic</PackageTags>
     <RepositoryUrl>https://github.com/clast-project/datasketches</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/clast-project/datasketches</PackageProjectUrl>
